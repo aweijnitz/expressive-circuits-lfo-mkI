@@ -10,7 +10,7 @@ float knobToFreqSetting(int knobValue) {
 
 
 // Knobs with smooting
-const int numReadings = 10;
+const int numReadings = 2;
 
 int knobToWaveMode(int knobValue) {
   static int readings[numReadings];      // the readings from the analog input

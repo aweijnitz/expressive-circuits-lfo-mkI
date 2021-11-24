@@ -54,7 +54,7 @@
 #define HZ2PERIOD(hz) ((float)1/hz) // Calculate period of wave in seconds, given a frequency in Hz
 #define UPDATE_FREQ 96000.0 // Interrupt trigger frequency. Think of this as "sample rate in Hz". 'tuningFactor' is impacted by this value.
 #define PI2 6.283185
-#define CLK_TIMEOUT TO_MICROS(5)
+#define CLK_TIMEOUT TO_MICROS(0.05)
 
 #include "waveTables.h"
 #include "utils.h"
@@ -74,7 +74,7 @@ volatile float stepIncrement = lfoFrequency * incrementUpdateFactor;
 volatile float tableIndex = 0;
 
 // Ext clock state
-volatile boolean useExternalClock = false;
+volatile boolean extTriggerFired = false;
 volatile long timeLastTriggerMicros = micros();
 
 
@@ -85,12 +85,16 @@ void timerIsr() {
   soundOut();
 }
 
+/**
+ * This function is invoked by the pin interrupt
+ */
 void clkTrigIsr() {
   onExternalTrigger();
 }
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT); // Used for debugging
+  digitalWrite(LED_BUILTIN, LOW);
   pinMode(LFO_LED, OUTPUT);
   pinMode(FREQ_PIN, INPUT);
   pinMode(EXT_CLK_TRIG, INPUT_PULLUP);
@@ -131,25 +135,27 @@ void loop() {
   float frqCVRaw = (float) analogRead(FREQ_CV);
   frqCVRaw = (frqCVRaw - 2048) / 2; // "Zero center" CV reading to allow for negative values. Divide by two to scale how much CV influences knob setting.
   float cvModifiedFrequency = lfoFrequency + knobToFreqSetting(min(max(0, frqKnobRaw + frqCVRaw), 1023));
-  if (fabs(cvModifiedFrequency - lfoFrequency) > lfoFrequency * 0.03) { // Allow for some fluctuation of values (analogRead always retuns *something*)
+  /*
+    if (fabs(cvModifiedFrequency - lfoFrequency) > lfoFrequency * 0.03) { // Allow for some fluctuation of values (analogRead always retuns *something*)
     lfoFrequency = cvModifiedFrequency;
     onLFOFreqChange();
-  }
+    }*/
+  lfoFrequency = cvModifiedFrequency;
+  onLFOFreqChange();
 
   // EXT CLOCK TRIGGER
   // (state is changed via interrup handler)
-  // Note: Currently external trigger does a hard sync on the wave to the beginning of the wave table. No tempo sync.
-  if (useExternalClock) {
-    digitalWrite(LED_BUILTIN, HIGH);
+  // Note: The external trigger does a hard sync/reset on the wave to the beginning of the wave table, not tempo sync.
+  if (extTriggerFired) {
     if (micros() - timeLastTriggerMicros >= CLK_TIMEOUT) { // Timeout of 5s for using external clock trigger
-      useExternalClock = false;
+      extTriggerFired = false;
       digitalWrite(LED_BUILTIN, LOW);
     }
   }
 
   // READ WAVE_SELECT
   static byte damper = 0;
-  if (damper++%10 == 0) { // Sensor readings are very jittery. Only check mode knob ever so often. Reduce for quicker response.
+  if (damper++ % 10 == 0) { // Sensor readings are very jittery. Only check mode knob ever so often. Reduce for quicker response.
     int raw = analogRead(WAVE_SELECT);
     int mode = knobToWaveMode(analogRead(WAVE_SELECT)); // Keeps a moving average and returns the mapping.
     currentWaveForm = mode;
@@ -169,33 +175,35 @@ float onLFOFreqChange() {
 /**
    Reset LFO to start of wave whenever there is an external trigger (ex. CV trigger pulse).
 */
-float onExternalTrigger() {
+void onExternalTrigger() {
 
-  // Book keeping
-  useExternalClock = true;
-  timeLastTriggerMicros = micros();
+  if (extTriggerFired) // Can't re-trigger when triggering
+    return;
+  else {
+    extTriggerFired = true;
+    timeLastTriggerMicros = micros();
+    tableIndex = 0;
+    digitalWrite(LED_BUILTIN, HIGH);
+  }
 
-  // Reset to start of wave
-  tableIndex = 0;
 }
 
 
 /**
    For each timer interrupt, calculate next DAC value (stepping through the wave table).
 */
-volatile int lastDacOut = 511.5; // 511.5 = 1023/2 => the middle of the possible range. 
+volatile int lastDacOut = 512; // 511.5 = 1023/2 => the middle of the possible range.
 void soundOut() {
 
-  static int changeThreshold = 55;
+  static int changeThreshold = 60;
 
-  int dacVoltage = 511.5;
+  int dacVoltage = 0;
   if (currentWaveForm == LFO_STEP_RANDOM
       && ((int)tableIndex) == 0
-      && random(100) > changeThreshold) { // Likeliness of change = 35% (100-65)
-    int voltStep = random(50) - 25;
+      && random(100) > changeThreshold) { // Likeliness of change = N% (100 - changeThreshold)
+    int voltStep = random(50) - 25; // Step +/-12.5
     dacVoltage = lastDacOut + voltStep;
-    dacVoltage = min(1023, dacVoltage);
-    dacVoltage = max(0, dacVoltage);
+    dacVoltage = constrain(dacVoltage, 0, 1023);
   }
   else if (currentWaveForm != LFO_STEP_RANDOM) {
     dacVoltage = curWaveTable[(int)tableIndex];
@@ -217,10 +225,6 @@ void soundOut() {
    Fade LED in time with LFO output.
 */
 void blinkLED() {
-  int fadeVal = 0;
-  if (currentWaveForm == LFO_STEP_RANDOM)
-    fadeVal = (int)(255 * lastDacOut / 1023); // 255 is max PWM value. 1023 is max DAC output.
-  else
-    fadeVal = (int)(255 * curWaveTable[(int)tableIndex] / 1023);
+  int fadeVal = (int)(255 * (1023 - lastDacOut) / 1023); // 255 is max PWM value. 1023 is max DAC output.
   analogWrite(LFO_LED, fadeVal);
 }
