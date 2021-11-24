@@ -86,15 +86,14 @@ void timerIsr() {
 }
 
 /**
- * This function is invoked by the pin interrupt
- */
+   This function is invoked by the pin interrupt
+*/
 void clkTrigIsr() {
   onExternalTrigger();
 }
 
 void setup() {
-  pinMode(LED_BUILTIN, OUTPUT); // Used for debugging
-  digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(LED_BUILTIN, HIGH);
   pinMode(LFO_LED, OUTPUT);
   pinMode(FREQ_PIN, INPUT);
   pinMode(EXT_CLK_TRIG, INPUT_PULLUP);
@@ -112,6 +111,8 @@ void setup() {
   TimerTc3.initialize(TO_MICROS(HZ2PERIOD(UPDATE_FREQ)));
   TimerTc3.attachInterrupt(timerIsr);
   TimerTc3.start();
+  digitalWrite(LED_BUILTIN, LOW);
+
   //SerialUSB.begin(115200);
 }
 
@@ -183,7 +184,7 @@ void onExternalTrigger() {
     extTriggerFired = true;
     timeLastTriggerMicros = micros();
     tableIndex = 0;
-    digitalWrite(LED_BUILTIN, HIGH);
+    //    digitalWrite(LED_BUILTIN, HIGH);
   }
 
 }
