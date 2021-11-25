@@ -27,6 +27,10 @@ All pins are `#define`d in the source and can be changed if needed. The only exc
 
 - `TimerTC3.h` (Find via Arduino Libraries Manager, but you need to point to the XIAO boards URL first. All part of setting up for XIAO development.)
 
+### Hardware
+
+See schema in [VCLFO_v1_schema.pdf](VCLFO_v1_schema.pdf)
+
 ### LICENSE: ISC
 
 Copyright 2021 Anders Weijnitz
