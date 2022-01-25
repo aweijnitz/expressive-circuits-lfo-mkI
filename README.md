@@ -1,6 +1,6 @@
 # Digital Voltage Controlled Low Frequency Oscillator (VCLFO)
 
-This repository contains the code for a VCLFO, based on the Seeduino XIAO micro controller. 
+This repository contains the code for a Voltage Controlled Low Frequency Oscillator (VCLFO). It is based on the Seeduino XIAO micro controller. 
 The XIAO is a cheap, fast and small Arduino compatible with an onboard DAC. This makes it suitable for building basic digital modules for euro rack.
 
 ## Principle of operation
